@@ -1,0 +1,14 @@
+body {
+	width: 768px;
+	margin: 0 auto;
+	background: #38483f;
+}
+
+.MainText {
+	text-align: center;
+	font-size: 32px;
+	font-family: Arial;
+	color: lightgray;
+	margin: 6px;
+	height: 36px;
+}
