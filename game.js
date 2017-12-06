@@ -32,8 +32,10 @@ function create() {
     var blueSquare = tempGraphics.generateTexture();
     tempGraphics.destroy();
 
-    new Creature(100, 300, 50, 50, redSquare);
+    new ChaserEnemy(100, 300, 50, 50, redSquare);
     new Player(300, 400, 50, 50, blueSquare);
+
+    new Creature(500, 500, 50, 50, redSquare);
 
 }
 
@@ -102,6 +104,7 @@ function Entity () {
 function Creature (x, y, width, height, graphics) {
     Entity.call(this);
 
+    this.Solid = new Solid();
     this.Position = new Position(x, y);
     this.Velocity = new Velocity();
     this.Size = new Size(width, height);
@@ -115,6 +118,18 @@ function Player (x, y, width, height, graphics) {
     this.PlayerComponent = new PlayerComponent();
 
     this.refName = "player";
+}
+
+function Enemy (x, y, width, height, graphics) {
+    Creature.call(this, x, y, width, height, graphics);
+
+    this.AIComponent = new AIComponent();
+}
+
+function ChaserEnemy (x, y, width, height, graphics) {
+    Enemy.call(this, x, y, width, height, graphics);
+
+    this.AIChase = new AIChase("player");
 }
 
 // *** COMPONENTS ***
@@ -137,6 +152,10 @@ function Size (width, height) {
     this.height = height;
 }
 
+function Solid () {
+    Component.call(this, "Solid");
+}
+
 function Velocity () {
     Component.call(this, "Velocity");
 
@@ -157,10 +176,20 @@ function Input () {
     this.right = false;
     this.down = false;
     this.left = false;
-}
+} 
 
 function PlayerComponent () {
     Component.call(this, "PlayerComponent");
+}
+
+function AIComponent () {
+    Component.call(this, "AIComponent");
+}
+
+function AIChase (entityRefName) {
+    Component.call(this, "AIChase");
+
+    this.chaseEntityRefName = entityRefName;
 }
 
 // *** SYSTEMS ***
@@ -181,30 +210,75 @@ function PlayerControl (entity) {
     entity.Input.down = downKey.isDown;
     entity.Input.left = leftKey.isDown;
 }
-new System("PlayerControl", ["Input", "PlayerComponent"], PlayerControl);
+new System("PlayerControl", ["PlayerComponent", "Input"], PlayerControl);
+
+function AIControl (entity) {
+    if (entity.AIChase) {
+        var chaseEntity = getEntityByRefName(entity.AIChase.chaseEntityRefName);
+        entity.Input.up = (entity.Position.y > chaseEntity.Position.y);
+        entity.Input.right = (entity.Position.x < chaseEntity.Position.x);
+        entity.Input.down = (entity.Position.y < chaseEntity.Position.y);
+        entity.Input.left = (entity.Position.x > chaseEntity.Position.x);
+    }
+}
+new System("AIControl", ["AIComponent", "Input"], AIControl);
 
 function InputHandler (entity) {
-    entity.Velocity.x = 0;
-    entity.Velocity.y = 0;
+    entity.Velocity.x *= 0.9;
+    entity.Velocity.y *= 0.9;
 
     if (entity.Input.up) {
-        entity.Velocity.y = -4;
+        entity.Velocity.y += -0.4;
     }
     if (entity.Input.right) {
-        entity.Velocity.x = 4; 
+        entity.Velocity.x += 0.4;
     }
     if (entity.Input.down) {
-        entity.Velocity.y = 4; 
+        entity.Velocity.y += 0.4;
     }
     if (entity.Input.left) {
-        entity.Velocity.x = -4; 
+        entity.Velocity.x += -0.4;
     }
 }
 new System("InputHandler", ["Input", "Velocity"], InputHandler);
 
 function Movement (entity) {
-    entity.Position.x += entity.Velocity.x;
-    entity.Position.y += entity.Velocity.y;
+    var desiredX = entity.Position.x + entity.Velocity.x;
+    var desiredY = entity.Position.y + entity.Velocity.y;
+
+    if (entity.Solid) {
+        for (var i = 0; i < entities.length; i++) {
+            // entities[i]
+            if (isDifferentEntity(entity, entities[i]) && entities[i].Solid) {
+                if (overlapCheck(desiredX, desiredY, entity.Size.width, entity.Size.height, entities[i].Position.x, entities[i].Position.y, entities[i].Size.width, entities[i].Size.height)) {
+                    // colliding with another entity
+                    // check X axis movement
+                    if (overlapCheck(desiredX, entity.Position.y, entity.Size.width, entity.Size.height, entities[i].Position.x, entities[i].Position.y, entities[i].Size.width, entities[i].Size.height)) {
+                        if (entity.Position.x + entity.Size.width < entities[i].Position.x) {
+                            desiredX = entities[i].Position.x - entity.Size.width;
+                        } else if (entity.Position.x > entities[i].Position.x + entities[i].Size.width) {
+                            desiredX = entities[i].Position.x + entities[i].Size.width;
+                        } else {
+                            desiredX = entity.Position.x;
+                        }
+                    }
+
+                    if (overlapCheck(desiredX, desiredY, entity.Size.width, entity.Size.height, entities[i].Position.x, entities[i].Position.y, entities[i].Size.width, entities[i].Size.height)) {
+                        if (entity.Position.y + entity.Size.height < entities[i].Position.y) {
+                            desiredY = entities[i].Position.y - entity.Size.height;
+                        } else if (entity.Position.y > entities[i].Position.y + entities[i].Size.height) {
+                            desiredY = entities[i].Position.y + entities[i].Size.height;
+                        } else {
+                            desiredY = entity.Position.y;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    entity.Position.x = desiredX;
+    entity.Position.y = desiredY;
 }
 new System("Movement", ["Position", "Velocity"], Movement);
 
@@ -215,5 +289,3 @@ function Render (entity) {
     entity.Sprite.sprite.height = entity.Size.height;
 }
 new System("Render", ["Position", "Size", "Sprite"], Render);
-
-
